@@ -4,8 +4,8 @@
 % scenario to solve the Energy Constrained UAV and Charging Station UGV 
 % Routing Problem (ECU-CSURP).
 % For more information, please refer to the paper:
-%   Ropero, F., Muñoz, P., & R-Moreno, M. D. TERRA: A path planning 
-%   algorithm for cooperative UGV–UAV exploration. Engineering Applications 
+%   Ropero, F., Muï¿½oz, P., & R-Moreno, M. D. TERRA: A path planning 
+%   algorithm for cooperative UGVï¿½UAV exploration. Engineering Applications 
 %   of Artificial Intelligence, 78, 260-272, 2019.
 
 % System Settings
@@ -76,7 +76,49 @@ problem_params.R
 %problem_params.R
 %uav_data.R = problem_params.R;
 
-%Launch TERRA-2D
-[solution] = Test_2D(problem_params, uav_data, ugv_data, cfgParams);
+%Launch TERRA-2D with timeout (1 hour = 3600 seconds)
+timeout_seconds = 3600; % 1 hour timeout
+disp(['Starting Test_2D with timeout of ' num2str(timeout_seconds) ' seconds (1 hour)...']);
+
+% Use parallel computing to enable timeout
+try
+    % Start the function in the background
+    future = parfeval(@Test_2D, 1, problem_params, uav_data, ugv_data, cfgParams);
+    
+    % Monitor execution with timeout
+    start_time = tic;
+    timeout_reached = false;
+    
+    while ~strcmp(future.State, 'finished')
+        elapsed_time = toc(start_time);
+        
+        if elapsed_time > timeout_seconds
+            % Timeout reached - cancel the task
+            cancel(future);
+            timeout_reached = true;
+            error('Test_2D execution exceeded the timeout limit of %d seconds (1 hour). Execution has been stopped.', timeout_seconds);
+        end
+        
+        % Small pause to avoid busy waiting
+        pause(0.1);
+    end
+    
+    % If we get here, the task completed
+    if ~timeout_reached
+        solution = fetchOutputs(future);
+        disp('Test_2D completed successfully within the timeout limit.');
+    end
+    
+catch ME
+    if contains(ME.message, 'timeout') || contains(ME.message, 'exceeded')
+        rethrow(ME);
+    else
+        % Other error - try to cancel if still running
+        if exist('future', 'var') && ~strcmp(future.State, 'finished')
+            cancel(future);
+        end
+        rethrow(ME);
+    end
+end
 
 
